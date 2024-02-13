@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup as TagSoup
 import streamlit as st
 import requests
+import validators
 
 class InputManager:
     textbox_placeholder = 'Enter a RSS **url**.'
@@ -109,6 +110,12 @@ def get_dom_from_url(_url) -> TagSoup:
         #> If an error occurs while obtaining the DOM...
         print(f'Connection to the address failed [{_url}] Error: {e}')
 
+def is_url(url) -> bool:
+      """
+      this function checks if the URL is valid or not,
+      and returns a boolean value as the result.
+      """
+      return validators.url(url)
 
 if __name__ == "__main__":
     # Render
@@ -120,4 +127,6 @@ if __name__ == "__main__":
     input_manager = InputManager()
     user_input = input_manager.process_data()
 
-    print(user_input)
+    if is_url(user_input):
+      page_dom = get_dom_from_url(user_input)
+      print(page_dom.find('rss'))
