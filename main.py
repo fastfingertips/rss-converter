@@ -2,6 +2,7 @@ from bs4 import BeautifulSoup as TagSoup
 import streamlit as st
 import requests
 import validators
+import json
 
 class InputManager:
     textbox_placeholder = 'Enter a RSS **url**.'
@@ -81,13 +82,11 @@ def get_dom_from_url(_url) -> TagSoup:
     Reads and retrieves the DOM of the specified page URL.
     """
     try:
-        #> Provides information in the log file at the beginning of the connection.
-        print(f'Conection to the address [{_url}] is being established..')
         while True:
             #> https://stackoverflow.com/questions/23013220/max-retries-exceeded-with-url-in-requests
             try:
                 urlResponseCode = requests.get(_url, timeout=30)
-                urlDom = TagSoup(urlResponseCode.content.decode('utf-8'), 'html.parser')
+                urlDom = TagSoup(urlResponseCode.content.decode('utf-8'), 'xml')
                 if urlDom is not None:
                     return urlDom # Returns the page DOM
             except requests.ConnectionError as e:
@@ -127,6 +126,23 @@ if __name__ == "__main__":
     input_manager = InputManager()
     user_input = input_manager.process_data()
 
+
     if is_url(user_input):
-      page_dom = get_dom_from_url(user_input)
-      print(page_dom.find('rss'))
+        rss_dict = {}
+        channel =  get_dom_from_url(user_input).find("channel")
+
+        for element in channel.find_all():
+            rss_dict[element.name] = element.get_text()
+        
+        items = []
+        for item in channel.find_all("item"):
+            item_dict = {}
+
+            for element in item.find_all():
+                item_dict[element.name] = element.get_text()
+            items.append(item_dict)
+        
+        rss_dict["items"] = items
+        st.json(rss_dict)
+    else:
+        pass
