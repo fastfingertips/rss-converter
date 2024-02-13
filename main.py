@@ -2,29 +2,35 @@ from bs4 import BeautifulSoup as TagSoup
 import streamlit as st
 import requests
 import validators
-import json
 
 class InputManager:
+    # Placeholder text for the text input field
     textbox_placeholder = 'Enter a RSS **url**.'
 
     def __init__(self):
+        # Initialize the InputManager object
+        # - Store the input data from the text input field and query parameters
         self.data = {
-            'input': st.text_input(label=self.textbox_placeholder),
+            'input': st.sidebar.text_input(label=self.textbox_placeholder),
             'query': st.query_params.to_dict()
         }
 
     def process_data(self):
+        # Process the input data and return the cleaned URL
         input_data = self.data['input']
         query_data = self.data['query']
 
         if input_data:
+            # If input data is provided, use it
             data = input_data
         elif 'q' in query_data:
-            # URL Params Found
+            # If 'q' parameter is present in query parameters, use it
             data = query_data['q']
         else:
+            # If no input data or query parameters are found, set data to None
             data = None
 
+        # Return the cleaned URL data, if available
         return data.strip() if data else None
 
 class Page:
@@ -116,33 +122,128 @@ def is_url(url) -> bool:
       """
       return validators.url(url)
 
+def parse_soup_2(soup):
+    if not soup.name:
+        return str(soup)
+
+    result = {}
+    result['tag'] = soup.name
+    if soup.attrs:
+        result['attrs'] = soup.attrs
+    
+    if soup.string:
+        result['content'] = soup.string.strip()
+    else:
+        children = []
+        for child in soup.children:
+            if child.name:
+                children.append(parse_soup_2(child))
+        if children:
+            result['contents'] = children
+
+    return result
+
+def parse_soup(soup):
+    if is_url(user_input):
+        rss_dict = {}
+
+        for element in soup.find_all():
+            if element.name == "item":
+                break
+
+                    
+            if 'atom:link' in str(element):
+                continue
+                rss_dict['atom_link'] = {}
+                for attr in element.attrs:
+                    rss_dict['atom_link'][attr] = element[attr]
+                
+            
+            if len(element.find_all()) > 1:
+                rss_dict[element.name] = {}
+                for eleme in element.find_all():
+                    element_text = element.get_text()
+                    is_digit =  element_text.replace(".", "", 1).isdigit()
+                    rss_dict[element.name] = {
+                        eleme.name: float(element_text) if is_digit else element_text
+                        }
+                continue
+            element_text = element.get_text()
+            is_digit =  element_text.replace(".", "", 1).isdigit()
+            rss_dict[element.name] = float(element_text) if is_digit else element_text
+
+        items = []
+        for item in soup.find_all("item"):
+            item_dict = {}
+
+            for element in item.find_all():
+                element_text = element.get_text()
+                is_digit =  element_text.replace(".", "", 1).isdigit()
+                item_dict[element.name] = float(element_text) if is_digit else element_text
+            items.append(item_dict)
+        
+        rss_dict["items"] = items
+        st.json(rss_dict)
+
+
 if __name__ == "__main__":
     # Render
     page = Page()
     page.create_title()
     page.create_footer()
 
+    example_links = [
+            "https://letterboxd.com/horrorville/rss/",
+            "http://rss.cnn.com/rss/edition.rss",
+            "https://www.filmjabber.com/rss/rss-news.php",
+            "https://english.kyodonews.net/rss/all.xml",
+        ]
+
+    selected = st.sidebar.selectbox("Select a link", example_links)
+
     # Input
     input_manager = InputManager()
-    user_input = input_manager.process_data()
-
+    user_input = input_manager.process_data() or selected
 
     if is_url(user_input):
         rss_dict = {}
-        channel =  get_dom_from_url(user_input).find("channel")
+        dom =  get_dom_from_url(user_input).find('channel')
+    
+        # st.caption("test1")
+        # st.json(parse_soup(dom), expanded=False)
+        # st.caption("test2")
+        data = parse_soup_2(dom)
 
-        for element in channel.find_all():
-            rss_dict[element.name] = element.get_text()
+        st.json(data, expanded=False)
+        contents = data['contents']
         
-        items = []
-        for item in channel.find_all("item"):
-            item_dict = {}
+        dd = {}
+        for c in contents:
+            try:
+                dd[c['tag']] = c['content']
+            except KeyError: 
+                if c['tag'] == 'item':
+                    break
+                pass
 
-            for element in item.find_all():
-                item_dict[element.name] = element.get_text()
-            items.append(item_dict)
-        
-        rss_dict["items"] = items
-        st.json(rss_dict)
+        main_title = dd['title']
+        main_description = dd['description']
+        main_link = dd['link']
+
+        st.title(f"[{main_title}]({main_link})")
+        st.write(main_description)
+        for c in contents:
+            if c['tag'] == 'item':
+                for cc in c['contents']:
+                    if cc['tag'] == 'title':
+                        st.subheader(cc['content'])
+                    elif cc['tag'] == 'link':
+                        st.write(f"[{cc['content']}]({cc['content']})")
+                    elif cc['tag'] == 'description':
+                        st.write(cc['content'], unsafe_allow_html=True)
+                    elif cc['tag'] == 'pubDate':
+                        st.write(cc['content'])
+
     else:
-        pass
+        st.error("Please enter a valid URL")
+
